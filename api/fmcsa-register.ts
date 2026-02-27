@@ -11,6 +11,58 @@ function formatDateForFMCSA(date: Date): string {
   return `${day}-${month}-${year}`;
 }
 
+// Enhanced categorization function
+function categorizeEntry(text: string, contextBefore: string, contextAfter: string): string {
+  const fullContext = (contextBefore + ' ' + text + ' ' + contextAfter).toUpperCase();
+  
+  // Define category patterns with keywords - order matters, more specific first
+  const categoryPatterns: Array<{ name: string; keywords: string[] }> = [
+    {
+      name: 'NAME CHANGE',
+      keywords: ['NAME CHANGE', 'NAME CHANGES', 'CHANGE OF NAME']
+    },
+    {
+      name: 'CERTIFICATE OF REGISTRATION',
+      keywords: ['CERTIFICATE OF REGISTRATION', 'CERTIFICATES OF REGISTRATION']
+    },
+    {
+      name: 'CERTIFICATE, PERMIT, LICENSE',
+      keywords: ['CERTIFICATE, PERMIT', 'CERTIFICATES, PERMITS', 'LICENSES', 'CERTIFICATE, PERMIT, LICENSE']
+    },
+    {
+      name: 'GRANT DECISION NOTICES',
+      keywords: ['GRANT DECISION NOTICE', 'GRANT DECISION NOTICES', 'GRANT DECISIONS']
+    },
+    {
+      name: 'DISMISSAL',
+      keywords: ['DISMISSAL', 'DISMISSALS', 'DISMISSED']
+    },
+    {
+      name: 'WITHDRAWAL',
+      keywords: ['WITHDRAWAL', 'WITHDRAWAL OF APPLICATION', 'WITHDRAWN']
+    },
+    {
+      name: 'REVOCATION',
+      keywords: ['REVOCATION', 'REVOCATIONS', 'REVOKED']
+    },
+    {
+      name: 'TRANSFERS',
+      keywords: ['TRANSFER', 'TRANSFERS', 'TRANSFERRED']
+    }
+  ];
+
+  // Check each category pattern
+  for (const pattern of categoryPatterns) {
+    for (const keyword of pattern.keywords) {
+      if (fullContext.includes(keyword)) {
+        return pattern.name;
+      }
+    }
+  }
+
+  return 'MISCELLANEOUS';
+}
+
 export default async (req: VercelRequest, res: VercelResponse) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -65,17 +117,6 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     
     const entries: Array<{ number: string; title: string; decided: string; category: string }> = [];
     let match;
-    
-    const categoryKeywords: Record<string, string[]> = {
-      'NAME CHANGE': ['NAME CHANGES'],
-      'CERTIFICATE, PERMIT, LICENSE': ['CERTIFICATES, PERMITS & LICENSES'],
-      'CERTIFICATE OF REGISTRATION': ['CERTIFICATES OF REGISTRATION'],
-      'DISMISSAL': ['DISMISSALS'],
-      'WITHDRAWAL': ['WITHDRAWAL OF APPLICATION'],
-      'REVOCATION': ['REVOCATIONS'],
-      'TRANSFERS': ['TRANSFERS'],
-      'GRANT DECISION NOTICES': ['GRANT DECISION NOTICES']
-    };
 
     while ((match = pattern.exec(rawText)) !== null) {
       const docket = match[1];
@@ -85,14 +126,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       if (title.length > 500) continue;
 
       const beforeIndex = match.index;
-      const contextText = rawText.substring(Math.max(0, beforeIndex - 1500), beforeIndex).toUpperCase();
+      const contextBefore = rawText.substring(Math.max(0, beforeIndex - 3000), beforeIndex);
+      const contextAfter = rawText.substring(beforeIndex + match[0].length, Math.min(rawText.length, beforeIndex + match[0].length + 1000));
       
-      let category = 'MISCELLANEOUS';
-      for (const [catName, keywords] of Object.entries(categoryKeywords)) {
-        if (keywords.some(k => contextText.includes(k))) {
-          category = catName;
-        }
-      }
+      // Use enhanced categorization
+      const category = categorizeEntry(title, contextBefore, contextAfter);
 
       entries.push({
         number: docket,
